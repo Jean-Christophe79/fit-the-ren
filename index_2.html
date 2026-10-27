@@ -1,0 +1,765 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Fit the ReN : jeu de placement de charges électriques sous un profil de production solaire ou éolien.">
+<title>Fit the ReN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout : bandeau de scénarios (météo × foyer) en haut ; plan de charge + lignes chiffrées + créneaux possibles au centre ; réserve dessous ; score et règles du foyer à droite. */
+:root{
+  --bg:#eef1f4; --panel:#ffffff; --ink:#18212b; --muted:#5b6774; --line:#d5dbe2; --grid:#e3e8ee;
+  --sun:#f2b705; --sun-fill:rgba(242,183,5,.26); --sun-ink:#8a6400; --wind:#64809e; --wind-fill:rgba(100,128,158,.24); --wind-ink:#46607d;
+  --ve:#2563c9; --heat:#d4512f; --app:#6f4fc4; --cook:#a8741a; --cool:#1592b0; --ecs:#2a9d6f; --tv:#5b6b80;
+  --over:#c62f2f; --good:#17855a; --opt:#b8327e;
+  --f-display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",ui-sans-serif,system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#10161d; --panel:#18212b; --ink:#e7edf3; --muted:#93a1b0; --line:#2c3845; --grid:#222d38;
+  --sun:#f5c431; --sun-fill:rgba(245,196,49,.18); --sun-ink:#f5c431; --wind:#9fb4cc; --wind-fill:rgba(159,180,204,.18); --wind-ink:#b7c8db;
+  --ve:#5b93f0; --heat:#ef7652; --app:#9b80ea; --cook:#e0a64a; --cool:#4cc4e0; --ecs:#5fd3a3; --tv:#9fb0c4; --over:#ff6b6b; --good:#4fd39b; --opt:#f07ab8; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#10161d; --panel:#18212b; --ink:#e7edf3; --muted:#93a1b0; --line:#2c3845; --grid:#222d38;
+  --sun:#f5c431; --sun-fill:rgba(245,196,49,.18); --sun-ink:#f5c431; --wind:#9fb4cc; --wind-fill:rgba(159,180,204,.18); --wind-ink:#b7c8db;
+  --ve:#5b93f0; --heat:#ef7652; --app:#9b80ea; --cook:#e0a64a; --cool:#4cc4e0; --ecs:#5fd3a3; --tv:#9fb0c4; --over:#ff6b6b; --good:#4fd39b; --opt:#f07ab8; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:24px 40px}
+.wrap{max-width:1220px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+header h1{font-family:var(--f-display);font-weight:800;font-size:clamp(28px,4vw,40px);line-height:1;margin:0;letter-spacing:-.02em}
+header h1 span{color:var(--sun-ink)}
+.lede{margin:6px 0 0;color:var(--muted);max-width:72ch;text-wrap:pretty}
+h2{font:600 12px var(--f-body);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0}
+button{font:inherit;color:inherit}
+button:focus-visible,.tray-item:focus-visible,input:focus-visible{outline:2px solid var(--sun);outline-offset:2px}
+
+.scen-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.scen-tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.seed{font:12px var(--f-mono);color:var(--muted)}
+.scen-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.scen{display:flex;flex-direction:column;gap:2px;padding:9px 10px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);cursor:pointer;text-align:left}
+.scen[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.scen .top{display:flex;justify-content:space-between;gap:6px;align-items:flex-start}
+.scen .sn{font-weight:600;font-size:13.5px;line-height:1.2}
+.lvl{flex:none;font:500 10.5px var(--f-mono);padding:1px 6px;border-radius:10px;border:1px solid var(--line);color:var(--muted)}
+.lvl.l3{border-color:var(--over);color:var(--over)}
+.lvl.l2{border-color:var(--sun-ink);color:var(--sun-ink)}
+.scen .ss{font:11px var(--f-mono);color:var(--muted);display:flex;justify-content:space-between;gap:6px}
+.scen svg{width:100%;height:28px;margin-top:3px}
+.scen .rec{font:11px var(--f-mono);color:var(--good);min-height:16px}
+
+.main{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px;align-items:start}
+@media (max-width:900px){.main{grid-template-columns:minmax(0,1fr)}}
+.mscore{display:none}
+@media (max-width:700px){
+  body{padding-block:14px calc(132px + env(safe-area-inset-bottom,0px))}
+  .wrap{gap:12px}
+  header h1{font-size:28px}
+  .lede{font-size:13.5px}
+  .scen-head{margin-bottom:6px}
+  .scen-list{display:flex;overflow-x:auto;gap:8px;scroll-snap-type:x mandatory;padding-bottom:4px;-webkit-overflow-scrolling:touch}
+  .scen{flex:0 0 132px;scroll-snap-align:start}
+  .scen svg{height:22px}
+  .board{padding:10px 8px 8px}
+  .board-head h3{font-size:17px}
+  .pvq{font-size:11.5px;gap:2px 12px}
+  .mscore{display:block;width:100%;font:13px var(--f-mono);color:var(--muted);margin-top:2px}
+  .mscore b{color:var(--ink);font-weight:600}
+  .chart-scroll{overflow:visible}
+  svg#chart{min-width:0;touch-action:pan-y}
+  .status{font-size:12.5px;min-height:34px}
+  .tray{position:fixed;left:0;right:0;bottom:0;z-index:40;border-radius:14px 14px 0 0;border-bottom:0;gap:8px;
+    padding:8px max(10px,env(safe-area-inset-right,0px)) calc(8px + env(safe-area-inset-bottom,0px)) max(10px,env(safe-area-inset-left,0px));
+    box-shadow:0 -6px 24px rgba(0,0,0,.12)}
+  .tray-head h2{display:none}
+  .tray-head .actions{width:100%;justify-content:flex-end}
+  .tray-head .btn{padding:5px 10px;font-size:12px}
+  .tray-list{display:flex;overflow-x:auto;gap:8px;-webkit-overflow-scrolling:touch;padding-bottom:2px}
+  .tray-item{flex:0 0 auto;padding:7px 10px;gap:8px;min-height:48px}
+  .tray-item .ti-meta{display:none}
+  .tray-item .ti-name{font-size:12.5px;white-space:nowrap}
+  .swatch{width:26px;height:30px}
+  .ti-count{font-size:12px}
+  .score{padding:12px}
+  .big{font-size:30px}
+}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px}
+.board{padding:14px 14px 10px;min-width:0}
+.board-head{display:flex;justify-content:space-between;align-items:baseline;gap:4px 14px;flex-wrap:wrap;margin-bottom:4px}
+.board-head h3{font:700 20px/1.2 var(--f-display);margin:0}
+.wx{font-size:13px;color:var(--muted)}
+.pvq{display:flex;flex-wrap:wrap;gap:4px 18px;font:12.5px var(--f-mono);color:var(--muted);margin:2px 0 6px;font-variant-numeric:tabular-nums}
+.pvq b{color:var(--ink);font-weight:500}
+.chart-scroll{overflow-x:auto}
+svg#chart{display:block;width:100%;min-width:660px;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+.status{min-height:22px;font-size:13px;color:var(--muted);margin-top:4px}
+.status.warn{color:var(--over)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--muted);margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:2px;vertical-align:-2px;margin-right:5px}
+
+.tray{padding:14px;display:flex;flex-direction:column;gap:10px}
+.tray-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.tray-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(178px,1fr));gap:10px}
+.tray-item{display:flex;gap:10px;align-items:center;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--bg);cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;text-align:left}
+.tray-item[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.tray-item.empty{opacity:.4;cursor:default}
+.swatch{flex:none;width:40px;height:40px;display:flex;align-items:flex-end;justify-content:center}
+.swatch b{display:block;border-radius:2px;border:1.5px solid}
+.ti-name{font-weight:600;font-size:13.5px;line-height:1.2}
+.ti-meta{font:11.5px var(--f-mono);color:var(--muted)}
+.ti-count{margin-left:auto;font:500 13px var(--f-mono);font-variant-numeric:tabular-nums}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+.btn{border:1px solid var(--line);background:var(--panel);font:500 13px var(--f-body);padding:7px 12px;border-radius:7px;cursor:pointer}
+.btn.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.btn.opt{border-color:var(--opt);color:var(--opt)}
+.btn:disabled{opacity:.5;cursor:default}
+
+.side{display:flex;flex-direction:column;gap:18px}
+.score{padding:16px;display:flex;flex-direction:column;gap:14px}
+.duel{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.duel div{display:flex;flex-direction:column}
+.big{font:800 36px/1 var(--f-display);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.big small{font-size:14px;font-weight:600;margin-left:3px}
+.big.opt{color:var(--opt)}
+.pct{font:800 44px/1 var(--f-display);font-variant-numeric:tabular-nums;letter-spacing:-.03em}
+.pct small{font-size:18px}
+.cap{font-size:12px;color:var(--muted)}
+table.cmp{width:100%;border-collapse:collapse;font-size:13px}
+.cmp th{font:500 11px var(--f-body);color:var(--muted);text-align:right;padding:0 0 4px}
+.cmp th:first-child{text-align:left}
+.cmp td{padding:5px 0;border-top:1px solid var(--line);font:500 13px var(--f-mono);text-align:right;font-variant-numeric:tabular-nums}
+.cmp td:first-child{font:13px var(--f-body);color:var(--muted);text-align:left}
+.cmp td.o{color:var(--opt)}
+.lam{display:flex;flex-direction:column;gap:4px;font-size:13px}
+.lam-row{display:flex;align-items:center;gap:10px}
+.lam input{flex:1;accent-color:var(--opt)}
+.lam output{font:500 13px var(--f-mono);min-width:80px;text-align:right}
+.lam p{margin:0;font-size:12px;color:var(--muted);text-wrap:pretty}
+.verdict{font-size:13px;padding:10px 12px;border-radius:8px;background:var(--bg);text-wrap:pretty}
+.hint{margin:0;font-size:13px;padding:10px 12px;border-radius:8px;border:1px dashed var(--opt);text-wrap:pretty}
+.verdict.win{background:color-mix(in srgb,var(--good) 14%,var(--panel))}
+.verdict.bad{background:color-mix(in srgb,var(--over) 10%,var(--panel))}
+dl{margin:0;display:grid;grid-template-columns:1fr auto;gap:6px 12px;font-size:13px}
+dt{color:var(--muted)} dd{margin:0;font:500 13px var(--f-mono);font-variant-numeric:tabular-nums;text-align:right}
+.rules-card{padding:16px;display:flex;flex-direction:column;gap:8px}
+.rules-card h3{margin:0;font:700 17px var(--f-display)}
+.rules{font-size:13px;margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px;text-wrap:pretty}
+.rules .common{color:var(--muted)}
+.ghost{position:fixed;left:0;top:0;pointer-events:none;z-index:50;border-radius:3px;opacity:.85;box-shadow:0 6px 18px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;font:600 11px var(--f-mono);color:#fff}
+.yeah{position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--bg) 55%,transparent);cursor:pointer}
+.yeah-box{display:flex;flex-direction:column;align-items:center;gap:4px;padding:28px 40px 24px;border-radius:20px;background:var(--panel);border:2px solid var(--good);box-shadow:0 20px 60px rgba(0,0,0,.25);animation:pop .55s cubic-bezier(.2,1.6,.4,1) both}
+.yeah-thumb{font-size:120px;line-height:1;display:block;transform-origin:70% 90%;animation:wiggle .9s .45s ease-in-out 2}
+.yeah-txt{font:800 56px/1 var(--f-display);color:var(--good);letter-spacing:-.02em}
+.yeah-sub{font-size:13px;color:var(--muted)}
+@keyframes pop{from{transform:scale(.2) rotate(-12deg);opacity:0}to{transform:none;opacity:1}}
+@keyframes wiggle{0%,100%{transform:rotate(0)}30%{transform:rotate(-14deg)}60%{transform:rotate(8deg)}}
+@media (prefers-reduced-motion:reduce){.yeah-box,.yeah-thumb{animation:none}}
+</style>
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Fit the <span>ReN</span></h1>
+    <p class="lede">Empilez les charges heure par heure sous la courbe de production, solaire, éolienne ou les deux, sans jamais dépasser l’abonnement de 6 kVA. Seules quelques configurations font tenir les 38 kWh de besoins entièrement sous la courbe : 4 pour les premiers défis, une seule pour les trois derniers.</p>
+  </header>
+
+  <section>
+    <div class="scen-head">
+      <h2>Défis · du plus ouvert au plus serré</h2>
+      <div class="scen-tools">
+        <span class="seed">version 18 · mobile</span>
+      </div>
+    </div>
+    <div class="scen-list" id="scen-list"></div>
+  </section>
+
+  <div class="main">
+    <div style="display:flex;flex-direction:column;gap:18px;min-width:0">
+      <section class="card board">
+        <div class="board-head"><h3 id="b-title">Plan de charge</h3><span class="wx" id="b-wx"></span><span class="mscore" id="mscore"></span></div>
+        <div class="pvq" id="pvq"></div>
+        <div class="chart-scroll"><svg id="chart" viewBox="0 0 960 420" aria-label="Plan de charge horaire et production photovoltaïque"></svg></div>
+        <div class="status" id="status">Touchez une charge dans la réserve, puis une heure sur le graphique. Touchez un bloc posé pour le renvoyer dans la réserve, ou une zone vide pour lire les valeurs de l’heure.</div>
+      </section>
+
+      <section class="card tray">
+        <div class="tray-head">
+          <h2>Réserve de charges</h2>
+          <div class="actions">
+            <button class="btn" id="b-heat">Répartir 1 bloc/h</button>
+            <button class="btn" id="b-clear">Tout retirer</button>
+          </div>
+        </div>
+        <div class="tray-list" id="tray"></div>
+      </section>
+    </div>
+
+    <div class="side">
+      <aside class="card score">
+        <div class="duel">
+          <div><span class="cap">Votre solaire consommé</span><span class="big" id="s-me">–</span></div>
+          <div><span class="cap">Optimum</span><span class="big opt" id="s-opt">–</span></div>
+        </div>
+        <div><span class="cap">Part de l’optimum atteinte</span><div class="pct" id="s-pct">–</div></div>
+        <div class="verdict" id="verdict"></div>
+        <div class="actions">
+          <button class="btn opt" id="b-show" aria-pressed="false">Montrer le profil optimal</button>
+          <button class="btn primary" id="b-solve">Charger la solution</button>
+          <button class="btn" id="b-hint">Indice</button>
+        </div>
+        <p class="hint" id="hint" hidden></p>
+        <dl>
+          <dt>Besoins placés</dt><dd id="d-load">–</dd>
+          <dt>Autoconsommation</dt><dd id="d-ac">–</dd>
+          <dt>Autoproduction</dt><dd id="d-ap">–</dd>
+          <dt>Soutirage réseau</dt><dd id="d-grid">–</dd>
+          <dt>Injection réseau</dt><dd id="d-inj">–</dd>
+          <dt>Puissance max appelée</dt><dd id="d-pk">–</dd>
+          <dt>Configurations optimales</dt><dd id="d-cnt">–</dd>
+        </dl>
+      </aside>
+      <aside class="card rules-card">
+        <h2>Règles du foyer</h2>
+        <h3 id="h-name"></h3>
+        <ul class="rules" id="rules"></ul>
+      </aside>
+    </div>
+  </div>
+</div>
+
+<div class="yeah" id="yeah" hidden role="status" aria-live="polite">
+  <div class="yeah-box"><span class="yeah-thumb" aria-hidden="true">👍</span><span class="yeah-txt">Yeah !!!</span><span class="yeah-sub">Optimum atteint</span></div>
+</div>
+
+<script id="solver-src">
+/* Solveur exact : maximise le solaire consommé sous contraintes (programmation dynamique heure par heure) */
+function solveAll(inp){
+  var t0=Date.now(), H=24, pv=inp.pv, PMAX=inp.pmax+1e-9;
+  var VN=inp.ve.n, VP=inp.ve.p, VAV=inp.ve.avail, VMX=inp.ve.max;
+  var TN=inp.th.n, TP=inp.th.p, TMH=inp.th.maxH, TMIN=inp.th.min;
+  var A=inp.apps, K=A.length, rad=[], mul=[], NA=1, k, h, j;
+  for(k=0;k<K;k++){rad.push(A[k].d+1);mul.push(NA);NA*=A[k].d+1;}
+  var NQ=TN+1, S=(VN+1)*NQ*NA;
+  var startOk=[], lastStart=[];
+  for(k=0;k<K;k++){
+    var so=[],ls=-1;
+    for(h=0;h<H;h++){var ok=h+A[k].d<=H;for(j=0;ok&&j<A[k].d;j++)if(!A[k].allow[h+j])ok=false;so.push(ok);if(ok)ls=h;}
+    startOk.push(so);lastStart.push(ls);
+  }
+  function decode(a){var st=[];for(var k=0;k<K;k++){st.push(a%rad[k]);a=(a/rad[k])|0;}return st;}
+  var appOpt=[];
+  for(h=0;h<H;h++){
+    var arr=new Array(NA);
+    for(var a=0;a<NA;a++){
+      var st=decode(a), forced=0, base=a, Z=[], dead=false;
+      for(k=0;k<K;k++){
+        var s=st[k],d=A[k].d;
+        if(s>0&&s<d){forced+=A[k].p;base+=mul[k];}
+        else if(s===0){
+          if(lastStart[k]<h){dead=true;break;}
+          var pre=A[k].after;
+          if(startOk[k][h]&&(pre<0||st[pre]===A[pre].d))Z.push(k);
+        }
+      }
+      var opts=[];
+      if(!dead){
+        for(var m=0;m<(1<<Z.length);m++){
+          var load=forced,na=base,mask=0,bad=false;
+          for(var z=0;z<Z.length;z++)if((m>>z)&1){k=Z[z];load+=A[k].p;na+=mul[k];mask|=1<<k;}
+          for(k=0;k<K&&!bad;k++){if(st[k]===0&&!((mask>>k)&1)&&lastStart[k]<=h)bad=true;var tw=A[k].twin;if(tw!=null&&tw>=0&&((mask>>k)&1)&&st[tw]===0&&!((mask>>tw)&1))bad=true;}
+          if(!bad&&load<=PMAX)opts.push(load,na,mask);
+        }
+      }
+      arr[a]=opts;
+    }
+    appOpt.push(arr);
+  }
+  var veCapAfter=[],thCapAfter=[],thMinAfter=[];
+  for(h=H-1;h>=0;h--){
+    veCapAfter[h]=h===H-1?0:veCapAfter[h+1]+(VAV[h+1]?VMX:0);
+    thCapAfter[h]=h===H-1?0:thCapAfter[h+1]+TMH[h+1];
+    thMinAfter[h]=h===H-1?0:thMinAfter[h+1]+TMIN[h+1];
+  }
+  var dp=new Float64Array(S).fill(-Infinity);dp[0]=0;var cnt=new Float64Array(S);cnt[0]=1;var par=[];
+  for(h=0;h<H;h++){
+    var nd=new Float64Array(S).fill(-Infinity),nc=new Float64Array(S),pp=new Int32Array(S),ch=new Int32Array(S);
+    var veM=VAV[h]?VMX:0, hmin=TMIN[h], hmax=TMH[h], P=pv[h], AO=appOpt[h];
+    for(var i=0;i<S;i++){
+      var val=dp[i];if(val===-Infinity)continue;var ci=cnt[i];
+      var a=i%NA,t=(i/NA)|0,q=t%NQ,v=(t/NQ)|0,opts=AO[a];
+      var nvMax=Math.min(veM,VN-v),nhMax=Math.min(hmax,TN-q);
+      for(var oi=0;oi<opts.length;oi+=3){
+        var aload=opts[oi],na=opts[oi+1],mask=opts[oi+2];
+        for(var nv=0;nv<=nvMax;nv++){
+          var v2=v+nv;if(v2+veCapAfter[h]<VN)continue;
+          for(var nh=hmin;nh<=nhMax;nh++){
+            var q2=q+nh;
+            if(q2+thCapAfter[h]<TN)continue;
+            if(q2+thMinAfter[h]>TN)break;
+            var load=aload+nv*VP+nh*TP;
+            if(load>PMAX)break;
+            var g=val+(load<P?load:P), jx=(v2*NQ+q2)*NA+na;
+            if(g>nd[jx]+1e-6){nd[jx]=g;nc[jx]=ci;pp[jx]=i;ch[jx]=nv|(nh<<2)|(mask<<4);}else if(g>nd[jx]-1e-6)nc[jx]+=ci;
+          }
+        }
+      }
+    }
+    par.push([pp,ch]);dp=nd;cnt=nc;
+  }
+  var fi=(VN*NQ+TN)*NA+NA-1;
+  if(dp[fi]===-Infinity)return {infeasible:true,ms:Date.now()-t0};
+  var plan=[],idx=fi;
+  for(h=H-1;h>=0;h--){var c=par[h][1][idx];plan[h]={nv:c&3,nh:(c>>2)&3,mask:c>>4};idx=par[h][0][idx];}
+  var loads=new Array(H).fill(0);
+  for(h=0;h<H;h++){
+    loads[h]+=plan[h].nv*VP+plan[h].nh*TP;
+    for(k=0;k<K;k++)if((plan[h].mask>>k)&1)for(j=0;j<A[k].d;j++)loads[h+j]+=A[k].p;
+  }
+  var Ssum=0,peak=0;for(h=0;h<H;h++){Ssum+=Math.min(loads[h],pv[h]);peak=Math.max(peak,loads[h]);}
+  return {S:Ssum,peak:peak,plan:plan,loads:loads,count:cnt[fi],ms:Date.now()-t0,states:S};
+}
+
+</script>
+<script>
+(function(){
+const H=24, M={l:100,r:16,t:26};
+let W=960, PH=320, CB=M.t+PH, CW=(W-M.l-M.r)/H, NUM1=CB+38, NUM2=CB+56, narrow=false;
+const mq=window.matchMedia?window.matchMedia("(max-width: 700px)"):{matches:false};
+const fs=n=>narrow?Math.round(n*1.3):n;
+function setDims(){
+  narrow=!!mq.matches;
+  W=narrow?420:960; M.l=narrow?28:100; M.r=narrow?6:16; M.t=narrow?20:26; PH=narrow?300:320;
+  CB=M.t+PH; CW=(W-M.l-M.r)/H; NUM1=CB+38; NUM2=CB+56;
+  const svgEl=document.getElementById("chart"); if(svgEl) svgEl.setAttribute("viewBox",`0 0 ${W} ${narrow?CB+30:CB+70}`);
+}
+setDims();
+let YMAX=9, KY=PH/YMAX;
+
+const KINDS={
+  ve:{name:"Véhicule électrique",row:"VE",short:"VE",w:1,p:5,n:4,color:"--ve"},
+  heat:{name:"Chauffage",row:"Chauffage",short:"",w:1,p:0.625,n:24,color:"--heat"},
+  clim:{name:"Climatisation",row:"Climatisation",short:"",w:1,p:1,n:10,color:"--cool"},
+  ll:{name:"Lave-linge",row:"Lave-linge",short:"LL",w:2,p:1,n:1,color:"--app"},
+  lv:{name:"Lave-vaisselle",row:"Lave-vaisselle",short:"LV",w:2,p:0.5,n:1,color:"--app"},
+  sl:{name:"Sèche-linge",row:"Sèche-linge",short:"SL",w:2,p:0.5,n:1,color:"--app"},
+  bec:{name:"Ballon d’eau chaude",row:"Ballon ECS",short:"ECS",w:3,p:1,n:1,color:"--ecs"},
+  pc:{name:"Plaques de cuisson",row:"Cuisson",short:"PC",w:1,p:1,n:2,color:"--cook"}
+};
+let KEYS=[],TOTAL=0,TK="heat",SUMMER=false;
+function setSeason(season){SUMMER=season==="ete";TK=SUMMER?"clim":"heat";KEYS=SUMMER?["ve","clim","ll","lv","bec","pc"]:["ve","heat","ll","lv","sl","bec","pc"];TOTAL=KEYS.reduce((s,k)=>s+KINDS[k].p*KINDS[k].w*KINDS[k].n,0);pieces=[];let id=0;for(const k of KEYS)for(let i=0;i<KINDS[k].n;i++)pieces.push({id:id++,kind:k,start:null,ord:0});}
+
+const R=(a,b)=>{const o=Array(H).fill(false);for(let h=a;h<b;h++)o[h]=true;return o;};
+const U=(...xs)=>xs.reduce((o,x)=>o.map((v,i)=>v||x[i]));
+const ALL=Array(H).fill(true), NONE=Array(H).fill(0);
+const mins=(...rs)=>{const o=Array(H).fill(0);rs.forEach(([a,b])=>{for(let h=a;h<b;h++)o[h]=1;});return o;};
+const COOK={pm:R(6,8),ps:R(19,21)};
+const HOUSES={
+  libre:{name:"Foyer souple",short:"souple",tag:"12 kVA",veAvail:ALL,veMax:2,heatMin:NONE,coolMin:NONE,allow:{ll:ALL,lv:ALL,sl:ALL,...COOK},slAfterLl:false,pmax:12,
+    rules:[
+      {t:"Chauffage : 2 blocs max par heure, aucune heure imposée.",s:"w"},
+      {t:"Climatisation entre 6h et 22h seulement, 2 blocs max par heure, aucune heure imposée.",s:"s"},
+      {t:"Appareils : à n’importe quelle heure."}] },
+  actifs:{name:"Couple actif",short:"couple actif",tag:"9 kVA",veAvail:U(R(0,8),R(18,24)),veMax:2,heatMin:mins([6,8],[18,22]),coolMin:mins([18,22]),allow:{ll:ALL,lv:R(12,24),sl:ALL,...COOK},slAfterLl:true,pmax:9,
+    rules:[{t:"Chauffage : 2 blocs max par heure, au moins 1 bloc chaque heure de 6h à 8h et de 18h à 22h.",s:"w"},
+      {t:"Climatisation entre 6h et 22h seulement, 2 blocs max par heure, au moins 1 bloc chaque heure de 18h à 22h (retour à la maison). Pré-rafraîchir l’après-midi est permis.",s:"s"},
+      {t:"Lave-vaisselle après midi."},
+      {t:"Sèche-linge seulement après la fin du lave-linge.",s:"w"}
+      ]},
+  contraint:{name:"Foyer contraint",short:"contraint",tag:"6 kVA",veAvail:U(R(0,7),R(19,24)),veMax:1,heatMin:mins([6,9],[17,23]),coolMin:mins([13,16],[19,22]),allow:{ll:R(8,20),lv:U(R(0,7),R(20,24)),sl:R(8,22),...COOK},slAfterLl:true,pmax:6,
+    rules:[{t:"Chauffage : 2 blocs max par heure, au moins 1 bloc chaque heure de 6h à 9h et de 17h à 23h.",s:"w"},
+      {t:"Climatisation entre 6h et 22h seulement, 2 blocs max par heure, au moins 1 bloc chaque heure de 13h à 16h et de 19h à 22h.",s:"s"},
+      {t:"Lave-linge entre 8h et 20h, sèche-linge entre 8h et 22h (pas de bruit la nuit).",s:"w"},
+      {t:"Lave-linge entre 8h et 20h (pas de bruit la nuit).",s:"s"},
+      {t:"Sèche-linge seulement après la fin du lave-linge.",s:"w"},
+      {t:"Lave-vaisselle le soir ou la nuit (20h–24h ou 0h–7h)."}
+      ]}
+};
+// Plus aucun créneau imposé, sauf pour la climatisation (6h–22h et heures de confort)
+for(const h of Object.values(HOUSES)){h.pmax=6;h.tag="6 kVA";h.veMax=1;h.veAvail=ALL.slice();h.heatMin=NONE.slice();h.allow={ll:ALL,lv:ALL,sl:ALL,bec:ALL,pc:ALL};}
+HOUSES.libre.rules=[{t:"Climatisation entre 6h et 22h seulement, aucune heure de confort imposée.",s:"s"},{t:"Lave-linge et sèche-linge dans n’importe quel ordre.",s:"w"},{t:"Aucune autre contrainte d’horaire."}];
+HOUSES.actifs.rules=[{t:"Climatisation entre 6h et 22h seulement, au moins 1 bloc chaque heure de 18h à 22h (retour à la maison).",s:"s"},{t:"Sèche-linge seulement après la fin du lave-linge.",s:"w"},{t:"Aucune autre contrainte d’horaire."}];
+HOUSES.contraint.rules=[{t:"Climatisation entre 6h et 22h seulement, au moins 1 bloc chaque heure de 13h à 16h et de 19h à 22h.",s:"s"},{t:"Sèche-linge seulement après la fin du lave-linge.",s:"w"},{t:"Aucune autre contrainte d’horaire."}];
+const COMMON=["Abonnement 6 kVA : la consommation ne dépasse jamais 6 kW, le placement est refusé sinon.","Véhicule électrique : 4 blocs de 1 h × 5 kW (20 kWh), 1 bloc max par heure (borne 7 kW).","Chauffage : 24 blocs de 1 h × 0,625 kW (15 kWh), 2 max par heure, à n’importe quelle heure (hors été).","Climatisation (été) : 10 blocs de 1 h × 1 kW, 2 max par heure, entre 6h et 22h. Pas de chauffage ni de sèche-linge en été.","Ballon d’eau chaude : 1 bloc de 3 h × 1 kW.","Plaques de cuisson : 2 blocs de 1 h × 1 kW.","Lave-linge 2 h × 1 kW, lave-vaisselle et sèche-linge 2 h × 0,5 kW.","Toutes les charges doivent être placées pour que le score compte."];
+
+/* ---------- météo ---------- */
+const SEASONS={
+  ete:{label:"Été",rise:6.4,set:22.1,peak:4.8},
+  printemps:{label:"Printemps",rise:7.3,set:20.9,peak:4.3},
+  automne:{label:"Automne",rise:8.1,set:19.2,peak:3.5},
+  hiver:{label:"Hiver",rise:8.9,set:17.6,peak:2.5}
+};
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const WEATHER={
+  clair:{label:"ciel dégagé",f:r=>Array.from({length:H},()=>0.93+0.07*r())},
+  orage:{label:"soleil puis orage",f:r=>{const t=12+Math.floor(r()*4);return Array.from({length:H},(_,h)=>h<t?0.9+0.1*r():h<t+2?0.08+0.1*r():0.25+0.35*r());}},
+  couvert:{label:"couvert toute la journée",f:r=>{let c=0.25;return Array.from({length:H},()=>{c=clamp(0.7*c+0.3*(0.15+0.25*r()),0.1,0.4);return c;});}},
+  giboulees:{label:"averses et éclaircies",f:r=>{let s=r()<.5;return Array.from({length:H},()=>{if(r()<0.45)s=!s;return s?0.85+0.15*r():0.15+0.2*r();});}},
+  brume:{label:"brume matinale puis soleil",f:r=>{const t=10+Math.floor(r()*3);return Array.from({length:H},(_,h)=>h<t?0.1+0.1*r():h===t?0.5:0.85+0.15*r());}},
+  voile:{label:"voile nuageux",f:r=>{let c=0.6;return Array.from({length:H},()=>{c=clamp(0.6*c+0.4*(0.45+0.4*r()),0.35,0.9);return c;});}}
+};
+// Défis : profils construits pour qu’une seule configuration remplisse exactement le gabarit (vérifié par le solveur)
+// Défis progressifs : nombre de configurations optimales 4,4,4,3,3,2,2,1,1,1 (vérifié par le solveur)
+const SCENARIOS=[
+  {id:"d01",src:"soleil",nsol:4,name:"Beau temps",desc:"une cloche bien régulière",pv:[0, 0, 0, 0, 0, 0, 0.1, 0.2, 0.4, 1.2, 2.4, 4.1, 5.3, 6.4, 6.2, 5.6, 4.9, 2.4, 1.2, 1.3, 0.4, 0.2, 0, 0]},
+  {id:"d02",src:"vent",nsol:4,name:"Vent de nuit",desc:"rafales de 2h à 6h, brise le matin",pv:[0.2, 2.1, 6.2, 6.1, 5.3, 5.3, 3.1, 3.4, 3.6, 2.7, 2.3, 0.3, 0.4, 0.2, 0.3, 0.2, 0.4, 0.3, 0.2, 0.3, 0.3, 0.1, 0.3, 0.4]},
+  {id:"d03",src:"mixte",nsol:4,name:"Nuit venteuse, midi ensoleillé",desc:"éolien la nuit, solaire à midi",pv:[0.1, 1.1, 6.2, 6.3, 2.2, 0.6, 0.8, 0.2, 1.1, 1.3, 2.4, 3.2, 6.1, 6.2, 2.2, 1.3, 0.4, 0.1, 0.4, 0.4, 0.1, 0.4, 0.2, 0.2],sun:[0, 0, 0, 0, 0, 0, 0, 0.2, 1.1, 1.3, 2.4, 3.2, 4.3, 4.6, 2.2, 1.3, 0.4, 0.1, 0.4, 0.4, 0.1, 0, 0, 0]},
+  {id:"d04",src:"soleil",nsol:3,name:"Soleil franc",desc:"production soutenue de 10h à 15h",pv:[0, 0, 0, 0, 0, 0, 0.2, 0.4, 1.4, 1.9, 4.9, 5.3, 5.2, 6.1, 5.3, 4.3, 2.3, 2.4, 1.3, 1.4, 0.4, 0.2, 0, 0]},
+  {id:"d05",src:"mixte",nsol:3,name:"Soleil puis vent du soir",desc:"le vent prend le relais à 20h",pv:[0.3, 0.1, 0.2, 0.2, 0.3, 0.2, 0.2, 0.2, 1.2, 2.4, 2.2, 2.1, 3.4, 6.2, 6.2, 1.8, 0.6, 0.3, 0.2, 0.2, 5.3, 5.2, 2.2, 2.1],sun:[0, 0, 0, 0, 0, 0, 0, 0.2, 1.2, 2.2, 2.2, 2.1, 3.4, 4.6, 4.6, 1.8, 0.6, 0.3, 0.2, 0.2, 0.5, 0, 0, 0]},
+  {id:"d06",src:"vent",nsol:2,name:"Tempête avant l’aube",desc:"très fort de 0h à 4h, reprise à 8h",pv:[5.1, 5.2, 6.4, 5.3, 0.1, 0.4, 2.2, 2.4, 4.3, 4.7, 4.9, 0.4, 0.4, 0.1, 0.1, 0.4, 0.2, 0.3, 0.2, 0.2, 0.2, 0.2, 0.4, 0.2]},
+  {id:"d07",src:"soleil",nsol:2,name:"Orage à 16h",desc:"plateau à 5 kW coupé net à 16h",pv:[0, 0, 0, 0, 0, 0, 0.4, 1.1, 3.3, 3.9, 4.7, 5.3, 5.3, 5.1, 5.3, 5.1, 1.4, 0.4, 0.2, 0.1, 0.3, 0.3, 0, 0]},
+  {id:"d08",src:"mixte",nsol:1,name:"Vent à l’aube, soleil à midi",desc:"deux pics bien séparés",pv:[0.4, 0.4, 0.3, 0.1, 5.2, 6.3, 1.3, 3.4, 1.3, 1.1, 3.4, 5.6, 5.8, 6.2, 1.4, 0.4, 0.2, 0.3, 0.3, 0.1, 0.4, 0.4, 0.1, 0.2],sun:[0, 0, 0, 0, 0, 0, 0, 0.5, 1.3, 1.1, 3, 3.8, 4.3, 4.6, 1.4, 0.4, 0.2, 0.3, 0.3, 0.1, 0.4, 0, 0, 0]},
+  {id:"d09",src:"vent",nsol:1,name:"Vent du soir",desc:"le vent se lève en fin d’après-midi",pv:[0.3, 0.1, 0.1, 0.2, 0.2, 0.3, 0.2, 0.3, 0.4, 0.2, 1.2, 1.3, 1.3, 1.2, 1.2, 3.8, 2.8, 1.3, 5.3, 5.1, 5.1, 6.3, 3.3, 2.2]},
+  {id:"d10",src:"soleil",nsol:1,name:"Plateau de midi",desc:"production écrêtée de 13h à 17h",pv:[0, 0, 0, 0, 0, 0, 0.1, 0.2, 0.4, 1.4, 1.4, 2.2, 5.2, 6.1, 6.2, 6.3, 6.2, 4.8, 0.9, 0.4, 0.2, 0.1, 0, 0]}
+];
+function buildPV(sc){return {pv:sc.pv.slice(),season:"ete",house:"libre"};}
+
+/* ---------- état ---------- */
+let pieces=[],order=0,selected=null,showOpt=false,lambda=1;
+let scen=SCENARIOS[0],pv=[],meta={},house=HOUSES.libre,opt=null;
+let records={}; try{records=JSON.parse(localStorage.getItem("ps5-records")||"{}")||{};}catch(e){records={};}
+function saveRecord(gap){if(records[scen.id]!==undefined&&gap>=records[scen.id]-1e-9)return;records[scen.id]=Math.max(0,gap);try{localStorage.setItem("ps5-records",JSON.stringify(records));}catch(e){}renderScenarios();}
+
+function allowed(kind,h){
+  if(h<0||h>=H) return false;
+  if(kind==="ve") return house.veAvail[h];
+  if(kind==="heat") return true;
+  if(kind==="clim") return h>=6&&h<22;
+  return house.allow[kind][h];
+}
+function hoursText(kind){
+  const r=[];let a=null;
+  for(let h=0;h<=H;h++){const ok=h<H&&allowed(kind,h);if(ok&&a===null)a=h;if(!ok&&a!==null){r.push(a+"h–"+h+"h");a=null;}}
+  return r.length===1&&r[0]==="0h–24h"?"":r.join(", ");
+}
+function layout(excl){
+  const top=new Array(H).fill(0),cells=[];
+  pieces.filter(p=>p.start!==null&&p.id!==excl).sort((a,b)=>a.ord-b.ord).forEach(p=>{
+    const k=KINDS[p.kind];
+    for(let c=p.start;c<p.start+k.w;c++){cells.push({p,c,y0:top[c],y1:top[c]+k.p});top[c]+=k.p;}
+  });
+  return {top,cells};
+}
+function canPlace(p,start){
+  const k=KINDS[p.kind];
+  if(start<0||start+k.w>H) return "Hors de la journée.";
+  for(let c=start;c<start+k.w;c++) if(!allowed(p.kind,c)){
+    if(p.kind==="ve") return `Le véhicule n’est pas branché à ${c}h.`;
+    if(p.kind==="clim") return "Climatisation : seulement entre 6h et 22h.";
+    if(p.kind==="pm"||p.kind==="ps") return `${k.name} : à placer entre ${k.hint.replace("–"," et ")}.`;
+    return `${k.name} : créneau interdit dans ce foyer (${c}h).`;
+  }
+  const lim=p.kind==="ve"?house.veMax:p.kind===TK?2:0;
+  if(lim){const n=pieces.filter(q=>q.kind===p.kind&&q.start===start&&q.id!==p.id).length;
+    if(n>=lim) return p.kind==="ve"?`Borne limitée : ${lim} bloc${lim>1?"s":""} VE max par heure.`:p.kind==="clim"?`Climatisation : ${lim} blocs max par heure.`:`Inertie limitée : ${lim} blocs de chauffage max par heure.`;}
+  const {top}=layout(p.id);
+  for(let c=start;c<start+k.w;c++) if(top[c]+k.p>house.pmax+1e-9) return `Abonnement ${house.tag} dépassé à ${c}h.`;
+  if(house.slAfterLl&&!SUMMER){
+    const ll=pieces.find(q=>q.kind==="ll"),sl=pieces.find(q=>q.kind==="sl");
+    if(p.kind==="sl"&&ll.start!==null&&start<ll.start+2) return "Le sèche-linge démarre après la fin du lave-linge.";
+    if(p.kind==="ll"&&sl.start!==null&&sl.start<start+2) return "Le lave-linge doit finir avant le départ du sèche-linge.";
+  }
+  return null;
+}
+function place(p,start){const err=canPlace(p,start);if(err){say(err,true);return false;}p.start=start;p.ord=++order;return true;}
+const thHour=i=>SUMMER?12+i:i;
+function tmin(){return SUMMER?house.coolMin:house.heatMin;}
+function heatSpread(){pieces.filter(p=>p.kind===TK).forEach((p,i)=>{p.start=thHour(i);p.ord=++order;});}
+function resetBoard(){pieces.forEach(p=>p.start=null);heatSpread();}
+function heatCount(){const n=new Array(H).fill(0);pieces.forEach(p=>{if(p.kind===TK&&p.start!==null)n[p.start]++;});return n;}
+function applySolution(){
+  pieces.forEach(p=>p.start=null);
+  const pick=k=>pieces.find(p=>p.kind===k&&p.start===null);
+  const put=(k,h)=>{const p=pick(k);if(p){p.start=h;p.ord=++order;}};
+  opt.plan.forEach((s,h)=>{for(let i=0;i<s.nh;i++)put(TK,h);});
+  ["pc","lv","ll","sl","bec"].forEach(key=>curAppKeys.forEach((k,i)=>{if(k===key)opt.plan.forEach((s,h)=>{if((s.mask>>i)&1)put(key,h);});}));
+  opt.plan.forEach((s,h)=>{for(let i=0;i<s.nv;i++)put("ve",h);});
+}
+
+/* ---------- optimum (Web Worker) ---------- */
+let worker=null,reqId=0,curAppKeys=[];
+try{
+  const src=document.getElementById("solver-src").textContent+"\nonmessage=function(e){postMessage({id:e.data.id,res:solveAll(e.data.inp)});};";
+  worker=new Worker(URL.createObjectURL(new Blob([src],{type:"text/javascript"})));
+  worker.onmessage=e=>gotOpt(e.data.id,e.data.res);
+  worker.onerror=()=>{worker=null;requestOpt();};
+}catch(e){worker=null;}
+function requestOpt(){
+  opt=null;const rid=++reqId;
+  curAppKeys=KEYS.filter(k=>k!=="ve"&&k!=="heat"&&k!=="clim").flatMap(k=>Array(KINDS[k].n).fill(k));
+  const inp={pv:pv.slice(),pmax:house.pmax,
+    ve:{n:KINDS.ve.n,p:KINDS.ve.p,avail:Array.from({length:H},(_,h)=>allowed("ve",h)),max:house.veMax},
+    th:{n:KINDS[TK].n,p:KINDS[TK].p,maxH:Array.from({length:H},(_,h)=>allowed(TK,h)?2:0),min:tmin()},
+    apps:curAppKeys.map((k,i)=>({p:KINDS[k].p,d:KINDS[k].w,allow:Array.from({length:H},(_,h)=>allowed(k,h)),after:k==="sl"&&house.slAfterLl?curAppKeys.indexOf("ll"):-1,twin:i>0&&curAppKeys[i-1]===k?i-1:-1}))};
+  if(worker) worker.postMessage({id:rid,inp});
+  else setTimeout(()=>gotOpt(rid,window.solveAll(inp)),30);
+  render();
+}
+function gotOpt(rid,res){if(rid!==reqId)return;opt=res;render();}
+
+function loadScenario(){
+  const b=buildPV(scen);pv=b.pv;meta=b;house=HOUSES[b.house];setSeason(b.season);
+  resetBoard();
+  document.getElementById("b-heat").textContent=SUMMER?"Clim 1 bloc/h de 12h à 22h":"Chauffage 1 bloc/h";
+  document.getElementById("b-title").textContent=scen.name;
+  document.getElementById("b-wx").textContent=SRC[scen.src]+" · "+scen.desc;
+  document.getElementById("h-name").textContent=house.name;
+  const ul=document.getElementById("rules");ul.innerHTML="";
+  house.rules.filter(r=>!r.s||(r.s==="s")===SUMMER).forEach(r=>{const li=document.createElement("li");li.textContent=r.t;ul.appendChild(li);});
+  COMMON.forEach(t=>{const li=document.createElement("li");li.className="common";li.textContent=t;ul.appendChild(li);});
+  let E=0,pk=0,ph=0,n=0;pv.forEach((v,h)=>{E+=v;if(v>pk){pk=v;ph=h;}if(v>=0.5)n++;});
+  document.getElementById("pvq").innerHTML=`<span>Énergie <b>${fmt(E)} kWh</b></span><span>Pic <b>${fmt(pk,2)} kW</b> à ${ph}h</span><span>Heures &gt; 0,5 kW : <b>${n} h</b></span><span>Besoins <b>${fmt(TOTAL,0)} kWh</b></span>`;
+  wasWin=false;hintIdx=0;document.getElementById("hint").hidden=true;renderScenarios();requestOpt();
+}
+
+/* ---------- rendu ---------- */
+const svg=document.getElementById("chart"),NS="http://www.w3.org/2000/svg";
+const X=c=>M.l+c*CW, Y=v=>M.t+PH-v*KY;
+const fmt=(v,d=1)=>v.toLocaleString("fr-FR",{minimumFractionDigits:d,maximumFractionDigits:d});
+const fpt=v=>(v<0?"−":"")+fmt(Math.abs(v),1);
+function el(t,a,parent){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);(parent||svg).appendChild(e);return e;}
+function txt(s,a,parent){const t=el("text",a,parent);t.textContent=s;return t;}
+let preview=null,drag=null;
+function activeKind(){return drag&&drag.moved?drag.p.kind:selected;}
+const SRC={soleil:"Solaire",vent:"Éolien",mixte:"Solaire + éolien"};
+const PC=src=>src==="vent"?{s:"--wind",f:"--wind-fill",i:"--wind-ink"}:src==="mixte"?{s:"--muted",f:"--sun-fill",i:"--ink"}:{s:"--sun",f:"--sun-fill",i:"--sun-ink"};
+function stepArea(top,bot,Xf,Yf){let d=`M${Xf(0)},${Yf(bot[0])}`;for(let h=0;h<H;h++)d+=` L${Xf(h)},${Yf(top[h])} L${Xf(h+1)},${Yf(top[h])}`;for(let h=H-1;h>=0;h--)d+=` L${Xf(h+1)},${Yf(bot[h])} L${Xf(h)},${Yf(bot[h])}`;return d+" Z";}
+function render(){
+  const pc=PC(scen.src);
+  const {top,cells}=layout(drag&&drag.moved&&drag.from==="chart"?drag.p.id:null);
+  const want=Math.max(...top,...pv,...(opt&&showOpt?opt.loads:[0]),house.pmax<=10?house.pmax:0);
+  YMAX=Math.max(6,Math.ceil(want+0.4));KY=PH/YMAX;
+  svg.textContent="";
+  const defs=el("defs",{});
+  const p1=el("pattern",{id:"hatch",width:"6",height:"6",patternUnits:"userSpaceOnUse",patternTransform:"rotate(45)"},defs);
+  el("rect",{width:"2.4",height:"6",style:"fill:var(--over)"},p1);
+  const p2=el("pattern",{id:"nogo",width:"6",height:"6",patternUnits:"userSpaceOnUse",patternTransform:"rotate(45)"},defs);
+  el("rect",{width:"1.5",height:"6",style:"fill:var(--muted)"},p2);
+  const ak=activeKind();
+  // grille
+  const step=YMAX>10?2:1;
+  for(let v=0;v<=YMAX;v+=step){
+    el("line",{x1:M.l,x2:W-M.r,y1:Y(v),y2:Y(v),style:`stroke:var(${v?"--grid":"--line"})`,"stroke-width":1});
+    txt(v,{x:M.l-(narrow?4:8),y:Y(v)+4,"text-anchor":"end",style:`fill:var(--muted);font:${fs(11)}px var(--f-mono)`});
+  }
+  txt("kW",{x:M.l-(narrow?4:8),y:M.t-8,"text-anchor":"end",style:`fill:var(--muted);font:${fs(10)}px var(--f-mono)`});
+  for(let h=0;h<=H;h++){
+    el("line",{x1:X(h),x2:X(h),y1:M.t,y2:CB,style:"stroke:var(--grid)","stroke-width":h%6?0.5:1});
+    if(h%(narrow?3:2)===0) txt(h+"h",{x:X(h),y:CB+20,"text-anchor":"middle",style:`fill:var(--muted);font:${fs(11)}px var(--f-mono)`});
+  }
+  // zones interdites pour le bloc en main
+  if(ak) for(let h=0;h<H;h++) if(!allowed(ak,h)) el("rect",{x:X(h),y:M.t,width:CW,height:PH,fill:"url(#nogo)",opacity:.35,"pointer-events":"none"});
+  // PV
+  let d=`M${X(0)},${Y(0)}`;for(let h=0;h<H;h++)d+=` L${X(h)},${Y(pv[h])} L${X(h+1)},${Y(pv[h])}`;d+=` L${X(H)},${Y(0)} Z`;
+  if(scen.src==="mixte"&&scen.sun){
+    const wind=pv.map((v,h)=>Math.max(0,v-scen.sun[h])),zero=Array(H).fill(0);
+    el("path",{d:stepArea(wind,zero,X,Y),style:"fill:var(--wind-fill)"});
+    el("path",{d:stepArea(pv,wind,X,Y),style:"fill:var(--sun-fill)"});
+  } else el("path",{d,style:`fill:var(${pc.f})`});
+  // blocs
+  cells.forEach(({p,c,y0,y1})=>{
+    if(drag&&drag.moved&&drag.p.id===p.id)return;
+    const k=KINDS[p.kind],g=el("g",{"data-id":p.id,style:"cursor:pointer"});
+    el("rect",{x:X(c)+2,y:Y(y1)+1.5,width:CW-4,height:Math.max(1,(y1-y0)*KY-3),rx:2.5,style:`fill:var(${k.color});fill-opacity:.5;stroke:var(${k.color})`,"stroke-width":1.5},g);
+    if(k.w>1&&c<p.start+k.w-1) el("rect",{x:X(c)+CW-2.5,y:Y(y1)+Math.max(0,(y1-y0)*KY/2-2),width:5,height:Math.min(4,Math.max(1.5,(y1-y0)*KY-3)),style:`fill:var(${k.color})`},g);
+    if(k.short&&(y1-y0)*KY>13&&c===p.start+Math.floor((k.w-1)/2))
+      txt(k.short,{x:k.w%2?X(c)+CW/2:X(c+1),y:Y((y0+y1)/2)+4,"text-anchor":"middle",style:`fill:var(--ink);font:600 ${narrow?9:10}px var(--f-mono);pointer-events:none`},g);
+  });
+  // soutirage
+  let peak=0,ph=-1;
+  for(let h=0;h<H;h++){const g=top[h]-pv[h];if(g>1e-6){el("rect",{x:X(h)+2,y:Y(top[h])+1.5,width:CW-4,height:Math.max(0,g*KY-2),fill:"url(#hatch)",opacity:.55,"pointer-events":"none"});}if(g>peak+1e-9){peak=g;ph=h;}}
+  let pl="";for(let h=0;h<H;h++)pl+=`${h?"L":"M"}${X(h)},${Y(pv[h])} L${X(h+1)},${Y(pv[h])} `;
+  el("path",{d:pl,style:`fill:none;stroke:var(${pc.s})`,"stroke-width":2.5,"stroke-linejoin":"round","pointer-events":"none"});
+  if(house.pmax<=YMAX){
+    el("line",{x1:M.l,x2:W-M.r,y1:Y(house.pmax),y2:Y(house.pmax),style:"stroke:var(--over)","stroke-width":1.5,"stroke-dasharray":"7 5","pointer-events":"none"});
+    txt(narrow?"6 kVA max":"abonnement 6 kVA · limite stricte",{x:W-M.r-4,y:Y(house.pmax)-5,"text-anchor":"end",style:`fill:var(--over);font:500 ${fs(11)}px var(--f-mono)`});
+  }
+  if(showOpt&&opt&&!opt.infeasible){
+    let od="";for(let h=0;h<H;h++)od+=`${h?"L":"M"}${X(h)},${Y(opt.loads[h])} L${X(h+1)},${Y(opt.loads[h])} `;
+    el("path",{d:od,style:"fill:none;stroke:var(--opt);stroke-dasharray:6 4","stroke-width":2.5,"pointer-events":"none"});
+  }
+  if(preview){
+    const k=KINDS[preview.p.kind];
+    for(let c=preview.start;c<preview.start+k.w;c++){if(c<0||c>=H)continue;
+      el("rect",{x:X(c)+2,y:Y(top[c]+k.p),width:CW-4,height:k.p*KY,rx:2.5,style:`fill:none;stroke:var(${preview.ok?k.color:"--over"});stroke-dasharray:4 3`,"stroke-width":2,"pointer-events":"none"});}
+  }
+  // lignes chiffrées (masquées sur téléphone : touchez une heure pour lire ses valeurs)
+  if(!narrow){
+  txt("Prod. (kW)",{x:M.l-8,y:NUM1,"text-anchor":"end",style:`fill:var(${pc.i});font:600 11px var(--f-body)`});
+  txt("Conso (kW)",{x:M.l-8,y:NUM2,"text-anchor":"end",style:"fill:var(--muted);font:600 11px var(--f-body)"});
+  for(let h=0;h<H;h++){
+    txt(pv[h]>=0.05?fmt(pv[h]):"·",{x:X(h)+CW/2,y:NUM1,"text-anchor":"middle",style:`fill:var(${pc.i});font:10.5px var(--f-mono)`});
+    txt(top[h]>=0.05?fmt(top[h]):"·",{x:X(h)+CW/2,y:NUM2,"text-anchor":"middle",style:`fill:var(${top[h]>pv[h]+1e-6?"--over":"--ink"});font:10.5px var(--f-mono)`});
+  }
+  }
+  // heures de confort obligatoires
+  const hc=heatCount(),tm=tmin();
+  for(let h=0;h<H;h++) if(tm[h]>0){
+    const bad=hc[h]<tm[h];
+    el("rect",{x:X(h)+2,y:CB+2,width:CW-4,height:5,rx:1.5,style:`fill:var(${bad?"--over":KINDS[TK].color})`});
+    if(bad) el("rect",{x:X(h)+1,y:M.t,width:CW-2,height:PH,style:"fill:none;stroke:var(--over);stroke-dasharray:5 4","stroke-width":1.5,"pointer-events":"none"});
+  }
+  renderTray(); renderScore(top,peak);
+}
+function renderTray(){
+  const tray=document.getElementById("tray");tray.textContent="";
+  for(const k of KEYS){
+    const K=KINDS[k],left=pieces.filter(p=>p.kind===k&&p.start===null).length;
+    const b=document.createElement("button");b.className="tray-item"+(left?"":" empty");b.dataset.kind=k;b.id="tray-"+k;
+    b.setAttribute("aria-pressed",selected===k?"true":"false");
+    b.innerHTML=`<span class="swatch"><b style="width:${Math.min(36,K.w*15)}px;height:${Math.max(6,K.p*10)}px;background:color-mix(in srgb,var(${K.color}) 50%,transparent);border-color:var(${K.color})"></b></span>
+      <span><span class="ti-name">${K.name}</span><br><span class="ti-meta">${K.w} h × ${fmt(K.p,K.p%1?2:0)} kW${hoursText(k)?" · "+hoursText(k):""}</span></span>
+      <span class="ti-count">${left}/${K.n}</span>`;
+    tray.appendChild(b);
+  }
+}
+let wasWin=false,suppressWin=false,yeahT;
+const yeah=document.getElementById("yeah");
+function celebrate(){yeah.hidden=false;clearTimeout(yeahT);yeahT=setTimeout(()=>{yeah.hidden=true;},2800);}
+yeah.addEventListener("click",()=>{yeah.hidden=true;clearTimeout(yeahT);});
+function renderScore(top,peak){
+  let PV=0,L=0,S=0,PK=0;for(let h=0;h<H;h++){PV+=pv[h];L+=top[h];S+=Math.min(pv[h],top[h]);PK=Math.max(PK,top[h]);}
+  const left=pieces.filter(p=>p.start===null).length;
+  const hc=heatCount(), miss=[];const tm=tmin();for(let h=0;h<H;h++)if(hc[h]<tm[h])miss.push(h);
+  const $=i=>document.getElementById(i), ready=opt&&!opt.infeasible;
+  $("s-me").innerHTML=fmt(S)+"<small>kWh</small>";
+  $("mscore").innerHTML=`<b>${fmt(S)}</b> / ${fmt(TOTAL,0)} kWh sous la courbe${left?` · ${left} bloc${left>1?"s":""} à placer`:""}`;
+  $("s-opt").innerHTML=ready?fmt(opt.S)+"<small>kWh</small>":opt?"–":"<small>calcul…</small>";
+  const pct=ready&&opt.S>0?Math.min(100,Math.floor(S/opt.S*1000)/10):null;
+  $("s-pct").innerHTML=pct===null?"–":fmt(pct,pct===100?0:1)+"<small>%</small>";
+  $("b-solve").disabled=!ready; $("b-show").disabled=!ready;
+  $("d-load").textContent=fmt(L)+" / "+fmt(TOTAL,0)+" kWh";
+  $("d-ac").textContent=PV?Math.round(S/PV*100)+" %":"–";
+  $("d-ap").textContent=L?Math.round(S/L*100)+" %":"–";
+  $("d-grid").textContent=fmt(L-S)+" kWh";
+  $("d-inj").textContent=fmt(PV-S)+" kWh";
+  $("d-pk").textContent=fmt(PK,2)+" kW";
+  $("d-cnt").textContent=ready?String(opt.count):"…";
+  const v=$("verdict");v.className="verdict";
+  if(opt&&opt.infeasible){v.className="verdict bad";v.textContent="Cette journée n’a aucune solution qui respecte toutes les règles. Changez de tirage.";return;}
+  if(left){wasWin=false;suppressWin=false;v.textContent=`Encore ${left} bloc${left>1?"s":""} à placer. Le score ne compte que lorsque toutes les charges ont leur heure.`;return;}
+  if(miss.length){wasWin=false;suppressWin=false;v.className="verdict bad";v.textContent=`${KINDS[TK].name} : confort non assuré à ${miss.map(h=>h+"h").join(", ")}. Ajoutez au moins 1 bloc à ces heures (colonnes en pointillés rouges).`;return;}
+  if(!ready){v.textContent="Calcul de l’optimum en cours…";return;}
+  const gap=opt.S-S, win=gap<=0.005;
+  if(win&&!wasWin&&!suppressWin) celebrate();
+  wasWin=win; suppressWin=false;
+  if(win){v.className="verdict win";v.innerHTML=`<b style="color:var(--good)">Optimum atteint.</b> ${opt.count>1?`Vous avez trouvé l’une des ${opt.count} configurations qui font`:"Vous avez trouvé la seule configuration qui fait"} tout tenir sous la courbe. Passez au défi suivant.`;}
+  else{
+    let worst=-1,wh=0;for(let h=0;h<H;h++){const e=top[h]-pv[h];if(e>worst){worst=e;wh=h;}}
+    v.textContent=`Il vous manque ${fmt(gap,2)} kWh de solaire. Le plus gros soutirage est à ${wh}h (${fmt(Math.max(0,worst),2)} kW au-dessus de la production).`;
+  }
+  saveRecord(gap);
+}
+function spark(sc){
+  const b=buildPV(sc),mx=6.5,w=120,h=28;let d=`M0,${h}`;
+  b.pv.forEach((v,i)=>{d+=` L${i*w/24},${h-v/mx*h} L${(i+1)*w/24},${h-v/mx*h}`;});d+=` L${w},${h} Z`;
+  let extra="";
+  if(sc.src==="mixte"&&sc.sun){const wd=b.pv.map((v,i)=>Math.max(0,v-sc.sun[i]));extra=`<path d="${stepArea(wd,Array(H).fill(0),i=>i*w/24,v=>h-v/mx*h)}" style="fill:var(--wind-fill)"/>`;}
+  return {svg:`<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><path d="${d}" style="fill:var(${PC(sc.src).f});stroke:var(${PC(sc.src).s})" stroke-width="1.2"/>${extra}</svg>`,E:b.pv.reduce((a,c)=>a+c,0),b};
+}
+function renderScenarios(){
+  const list=document.getElementById("scen-list");list.textContent="";
+  SCENARIOS.forEach(sc=>{
+    const s=spark(sc),b=document.createElement("button");b.className="scen";b.id="scen-"+sc.id;
+    b.setAttribute("aria-pressed",sc===scen?"true":"false");
+    const r=records[sc.id];
+    const rec=r===undefined?"":r<=0.005?"record : optimum":`record : à ${fmt(r,1)} kWh`;
+    const n=SCENARIOS.indexOf(sc)+1;
+    b.innerHTML=`<span class="top"><span class="sn">${sc.name}</span><span class="lvl ${sc.nsol===1?"l3":sc.nsol<=3?"l2":""}">défi ${n}</span></span>
+      <span class="ss"><span>${SRC[sc.src].toLowerCase()} · ${sc.nsol} solution${sc.nsol>1?"s":""}</span><span>${fmt(s.E,1)} kWh</span></span>${s.svg}<span class="rec">${rec}</span>`;
+    b.addEventListener("click",()=>{scen=sc;selected=null;loadScenario();say(`Défi ${n} « ${sc.name} » : ${sc.nsol>1?sc.nsol+" configurations":"une seule configuration"} tiennent sous la courbe.`);});
+    list.appendChild(b);
+  });
+}
+let statusT;
+function say(msg,warn){const s=document.getElementById("status");s.textContent=msg;s.className="status"+(warn?" warn":"");clearTimeout(statusT);if(warn)statusT=setTimeout(()=>{s.className="status";},2500);}
+
+/* ---------- interactions ---------- */
+const ghost=document.createElement("div");ghost.className="ghost";ghost.hidden=true;document.body.appendChild(ghost);
+function svgPoint(e){const pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;const m=svg.getScreenCTM();return m?pt.matrixTransform(m.inverse()):null;}
+function overChart(e){const r=svg.getBoundingClientRect();if(!(e.clientX>=r.left&&e.clientX<=r.right&&e.clientY>=r.top&&e.clientY<=r.bottom))return false;const pt=svgPoint(e);return pt&&pt.y<=CB+20&&pt.x>=M.l-10;}
+function startCol(e,p){const pt=svgPoint(e);if(!pt)return null;const k=KINDS[p.kind];return clamp(Math.round((pt.x-M.l)/CW-k.w/2),0,H-k.w);}
+const nextFree=kind=>pieces.find(p=>p.kind===kind&&p.start===null);
+
+document.addEventListener("pointerdown",e=>{
+  const t=e.target.closest(".tray-item, #chart g[data-id]");if(!t)return;
+  let p,from;
+  if(t.classList.contains("tray-item")){p=nextFree(t.dataset.kind);from="tray";if(!p)return;}
+  else{p=pieces.find(q=>q.id==t.dataset.id);from="chart";}
+  drag={p,from,x:e.clientX,y:e.clientY,moved:false,kind:p.kind};e.preventDefault();
+});
+window.addEventListener("pointermove",e=>{
+  if(!drag)return;
+  if(!drag.moved&&Math.hypot(e.clientX-drag.x,e.clientY-drag.y)<6)return;
+  if(!drag.moved){
+    drag.moved=true;const K=KINDS[drag.p.kind],s=svg.getBoundingClientRect().width/W;
+    ghost.style.width=(CW*K.w*s)+"px";ghost.style.height=Math.max(8,K.p*KY*s)+"px";
+    ghost.style.background=getComputedStyle(document.documentElement).getPropertyValue(K.color);ghost.textContent=K.short;ghost.hidden=false;
+  }
+  ghost.style.transform=`translate(${e.clientX-ghost.offsetWidth/2}px,${e.clientY-ghost.offsetHeight/2}px)`;
+  if(overChart(e)){const st=startCol(e,drag.p);preview={p:drag.p,start:st,ok:!canPlace(drag.p,st)};}else preview=null;
+  render();
+});
+window.addEventListener("pointercancel",()=>{if(drag){drag=null;ghost.hidden=true;preview=null;render();}});
+function inspect(e){const pt=svgPoint(e);if(!pt)return;const h=Math.floor((pt.x-M.l)/CW);if(h<0||h>=H)return;const {top}=layout();
+  say(`${h}h–${h+1}h · production ${fmt(pv[h])} kW · consommation ${fmt(top[h])} kW${top[h]>pv[h]+1e-6?" · dépasse de "+fmt(top[h]-pv[h])+" kW":" · marge "+fmt(pv[h]-top[h])+" kW"}`);}
+window.addEventListener("pointerup",e=>{
+  if(drag){
+    const d=drag;drag=null;ghost.hidden=true;preview=null;
+    if(d.moved){
+      if(overChart(e)){const st=startCol(e,d.p),old=d.p.start;d.p.start=null;if(!place(d.p,st))d.p.start=old;else say(`${KINDS[d.p.kind].name} placé à ${st}h.`);}
+      else if(d.from==="chart"){d.p.start=null;say(`${KINDS[d.p.kind].name} renvoyé dans la réserve.`);}
+    }else{
+      if(d.from==="tray"){selected=d.kind;say(`${KINDS[selected].name} sélectionné : touchez une heure sur le graphique. Échap pour annuler.`);}
+      else{d.p.start=null;say(`${KINDS[d.p.kind].name} renvoyé dans la réserve.`);}
+    }
+    render();return;
+  }
+  if(selected&&overChart(e)){
+    const p=nextFree(selected);if(!p){selected=null;render();return;}
+    const st=startCol(e,p);if(place(p,st))say(`${KINDS[p.kind].name} placé à ${st}h.`);
+    if(!nextFree(selected))selected=null;render();
+  }
+  else if(!selected&&overChart(e)) inspect(e);
+});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&selected){selected=null;render();}});
+if(mq.addEventListener)mq.addEventListener("change",()=>{setDims();render();});
+
+document.getElementById("b-heat").addEventListener("click",()=>{
+  pieces.filter(p=>p.kind===TK).forEach(p=>p.start=null);
+  let n=0;pieces.filter(p=>p.kind===TK).forEach((p,i)=>{if(!canPlace(p,thHour(i))){p.start=thHour(i);p.ord=++order;}else n++;});
+  say(`${KINDS[TK].name} répartie à 1 bloc par heure`.replace("Chauffage répartie","Chauffage réparti")+(n?` (${n} heure${n>1?"s":""} bloquée${n>1?"s":""} par l’abonnement).`:"."));render();
+});
+document.getElementById("b-clear").addEventListener("click",()=>{pieces.forEach(p=>p.start=null);selected=null;say("Toutes les charges sont dans la réserve.");render();});
+document.getElementById("b-show").addEventListener("click",e=>{showOpt=!showOpt;e.currentTarget.setAttribute("aria-pressed",String(showOpt));e.currentTarget.textContent=showOpt?"Masquer le profil optimal":"Montrer le profil optimal";render();});
+let hintIdx=0;
+function hintList(){
+  if(!opt||opt.infeasible)return [];
+  const at=pred=>opt.plan.map((s,h)=>pred(s)?h+"h":null).filter(Boolean);
+  const out=[`Les 4 blocs du véhicule électrique se placent à ${at(s=>s.nv>0).join(", ")}.`];
+  ["bec","ll","lv","sl","pc"].forEach(k=>{
+    const hs=[];curAppKeys.forEach((k2,i)=>{if(k2===k)opt.plan.forEach((s,h)=>{if((s.mask>>i)&1)hs.push(h+"h");});});
+    if(hs.length){const u=[...new Set(hs)];out.push(`${KINDS[k].name} : ${u.map(x=>{const n=hs.filter(y=>y===x).length;return (n>1?n+" blocs ":"")+"à "+x;}).join(" et ")}.`.replace(": à",": départ à"));}
+  });
+  const th=opt.plan.map((s,h)=>s.nh?`${s.nh>1?s.nh+" blocs":"1 bloc"} à ${h}h`:null).filter(Boolean);
+  if(th.length)out.push(`${KINDS[TK].name} : ${th.join(", ")}.`);
+  return out;
+}
+document.getElementById("b-hint").addEventListener("click",()=>{
+  const L=hintList();if(!L.length)return;
+  const p=document.getElementById("hint");p.hidden=false;
+  hintIdx=Math.min(hintIdx+1,L.length);
+  p.innerHTML=L.slice(0,hintIdx).map((t,i)=>`<b>Indice ${i+1}/${L.length}.</b> ${t}`).join("<br>");
+});
+document.getElementById("b-solve").addEventListener("click",()=>{if(!opt||opt.infeasible)return;applySolution();suppressWin=true;say("Solution optimale chargée. Déplacez des blocs pour voir ce que chaque choix coûte.");render();});
+loadScenario();
+})();
+</script>
+</body>
+</html>
